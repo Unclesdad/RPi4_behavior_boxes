@@ -7,6 +7,7 @@ import datetime as dt
 from picamera2 import Picamera2, Preview, MappedArray
 from picamera2.encoders import H264Encoder, Quality
 from picamera2.outputs import FileOutput
+import irig_h_gpio as irig
 import cv2
 from libcamera import controls
 from threading import Thread, Event
@@ -219,6 +220,7 @@ with io.open(VIDEO_FILE_NAME, 'wb') as buffer:
         time.sleep(2)
         print('Started Recording')
         while True:
+            irig.send_full_irig_h_timecode() # might bring up issues later without multithreading
             # time.sleep(.001)
             continue
 
