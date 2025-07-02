@@ -28,7 +28,7 @@ def signal_handler(signum, frame):
     sys.exit(0)
 
 signal.signal(signal.SIGINT, signal_handler)
-base_path = sys.argv[1]
+base_path = 'irig_output'
 
 # set high thread priority - may require sudo access
 try:
@@ -210,8 +210,8 @@ with io.open(VIDEO_FILE_NAME, 'wb') as buffer:
     try:
         print('Starting Recording')
         camera.start_recording(encoder, output)
-        camera.set_controls({"AfMode": controls.AfModeEnum.Manual,
-                             "LensPosition": 10.0})
+#        camera.set_controls({"AfMode": controls.AfModeEnum.Manual,
+#                             "LensPosition": 10.0})
         time.sleep(2)
         camera.set_controls({
             'AeEnable': False,
