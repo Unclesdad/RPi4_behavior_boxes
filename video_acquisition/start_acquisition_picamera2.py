@@ -232,5 +232,7 @@ with io.open(VIDEO_FILE_NAME, 'wb') as buffer:
         print(e)
 
     finally:
+        irig.finish()
         timestamps.close()
         sys.exit(0)
+        
