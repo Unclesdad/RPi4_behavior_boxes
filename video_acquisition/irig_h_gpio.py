@@ -9,10 +9,11 @@ SENDING_GPIO_PIN = 6
 SENDING_BIT_LENGTH = 1 # in seconds
 
 # Constants for timecode measuring
-DECODE_BIT_PERIOD = 1 / 25000 # for now frame rate is 25 kHz
+DECODE_BIT_PERIOD = 1 / 25_000 # for now frame rate is 25 kHz
 # pulse length thresholds (in seconds)
 P_THRESHOLD = 0.75 * SENDING_BIT_LENGTH # for pulse length of 0.8b
 ONE_THRESHOLD = 0.45 * SENDING_BIT_LENGTH # for pulse length of 0.5b
+ZERO_THRESHOLD = 0.05 * SENDING_BIT_LENGTH # for pulse length of 0.2b. This is to make sure error isnt recorded
 
 # Weights for the encoding values in an IRIG timecode
 SECONDS_WEIGHTS = [1, 2, 4, 8, 10, 20, 40]
@@ -27,11 +28,12 @@ pi = pigpio.pi()
 if not pi.connected:
     raise RuntimeError("Could not connect to pigpio daemon. Is 'pigpiod' running?")
 
-pi.set_mode(GPIO_PIN, pigpio.OUTPUT)
+pi.set_mode(SENDING_GPIO_PIN, pigpio.OUTPUT)
 
-def bcd_encode(value, weights):
+def bcd_encode(value: List[int], weights: List[int]):
     """
     Encodes an integer value into Binary Coded Decimal (BCD) format using specified weights.
+    This method assumes that the value is representable as a sum of a subset of the weights.
     """
     bcd_list = [0] * len(weights)
     for i in reversed(range(len(weights))):
@@ -40,9 +42,10 @@ def bcd_encode(value, weights):
             value -= weights[i]
     return bcd_list
 
-def bcd_decode(binary, weights):
+def bcd_decode(binary: List[int], weights: List[int]) -> int:
     """
     Decodes a Binary Coded Decimal (BCD) format using a dot product with the binary list and the weights.
+    This method assumes that the value is representable as a sum of a subset of the weights.
     """
     total = 0
     for weight, bit in zip(weights, binary):
@@ -50,7 +53,7 @@ def bcd_decode(binary, weights):
     return total
 
 
-def generate_irig_h_frame():
+def generate_irig_h_frame() -> List:
     """
     Generates a 60-bit IRIG-H timecode list based on the provided image's bit assignments.
     Includes seconds, minutes, hours, day of year, tenths of seconds, and year.
@@ -163,10 +166,15 @@ def send_irig_h_frame(frame):
             pi.write(SENDING_GPIO_PIN, 0)
             time.sleep(SENDING_BIT_LENGTH * 0.8)
 
-def decode_to_irig_h(binary_list: List[bool]) -> List:
+def find_pulse_length(binary_list: List[bool]) -> List[float]:
     """
-    Decodes a sample of measured electrical signals into an list-represented IRIG-H frame.
+    Decodes a sample of measured electrical signals into a list of pulse lengths (in seconds).
     """
+
+    if len(binary_list) < 2:
+        print("uh oh. you gave me a strangely short data set.")
+        return []
+    
     pulse_length_list = []
     length = 0
     for i in binary_list:
@@ -177,22 +185,58 @@ def decode_to_irig_h(binary_list: List[bool]) -> List:
         else:
             pulse_length_list.append(length)
             length = 0
-                
+
+    return pulse_length_list
+
+def decode_to_irig_h(binary_list: List[bool]) -> List:
+    """
+    Decodes a list of measured pulse lengths (in seconds) to a list-represented IRIG-H frame.
+    """
+
+    if len(binary_list) < 2:
+        print("uh oh. you gave me a strangely short data set.")
+        return []
+    
     def identify_pulse_length(length):
         if length > P_THRESHOLD:
             return 'P'
         if length > ONE_THRESHOLD:
             return 1
-        else:
+        if length > ZERO_THRESHOLD:
             return 0
+        else: 
+            return None
 
-    return [identify_pulse_length(length) for length in pulse_length_list]
+    return [bit for bit in [identify_pulse_length(length) for length in find_pulse_length(binary_list)] if bit != None]
 
-def irig_h_to_datetime(irig_list):
+def find_timecode_starts(binary_list: List[bool]) -> List[int]:
     """
-    Converts a list-represented IRIG-H frame into a Unix timecode (Measured in milliseconds since 00:00:00 UTC, January 1st, 1970)
+    Finds all the indexes in the measured list of booleans for where a timecode starts.
+    """
+    if len(binary_list) < 2:
+        print("uh oh. you gave me a strangely short data set.")
+        return []
+    
+    current_length = 0
+    starts = [0] if binary_list[0] else [] # list of indexes for when the timecodes start
+    flips = 1 if binary_list[0] else 0     # if its already recieving timcodes at the start, change starting behavior
+
+    for i in range(1, len(binary_list)):
+        if binary_list[i] != binary_list[i-1]:
+            flips += 1
+            if (flips - 1) % 120 == 0:
+                starts.append(i)
+    return starts
+        
+
+def irig_h_to_datetime(irig_list: List) -> dt:
+    """
+    Converts a list-represented IRIG-H frame into a Python datetime.
     Since IRIG does not encode century, this code assumes that the IRIG timecode is being sent in the same century as when this function is called.
     """
+    if len(irig_list) != 60:
+        print("I don't think thats a real irig-h timecode.")
+        return dt.min
     seconds = bcd_decode(irig_list[1:5], SECONDS_WEIGHTS[0:4]) + bcd_decode(irig_list[6:9], SECONDS_WEIGHTS[4:7])
     minutes = bcd_decode(irig_list[10:14], MINUTES_WEIGHTS[0:4]) + bcd_decode(irig_list[15:18], MINUTES_WEIGHTS[4:7])
     hours = bcd_decode(irig_list[20:24], HOURS_WEIGHTS[0:4]) + bcd_decode(irig_list[25:27], HOURS_WEIGHTS[4:6])
@@ -201,7 +245,11 @@ def irig_h_to_datetime(irig_list):
     year = bcd_decode(irig_list[50:54], YEARS_WEIGHTS[0:4]) + bcd_decode(irig_list[55:59], YEARS_WEIGHTS[4:8]) + (dt.now().year // 100) * 100 # add in century
     return dt.combine(datetime.date(year, 1, 1) + datetime.timedelta(days=(day_of_year - 1)), datetime.time(hours, minutes, seconds, deciseconds * 10_000))
 
-def irig_h_to_unix(irig_list):
+def irig_h_to_unix(irig_list: List) -> float:
+    """
+    Converts a list-represented IRIG-H frame into a Unix timecode (Measured in milliseconds since 00:00:00 UTC, January 1st, 1970).
+    Since IRIG does not encode century, this code assumes that the IRIG timecode is being sent in the same century as when this function is called.
+    """
     return irig_h_to_datetime(irig_list).timestamp()
     
 def generate_and_send_irig_h(): 
