@@ -23,11 +23,11 @@ DECISECONDS_WEIGHTS = [1, 2, 4, 8]
 YEARS_WEIGHTS = [1, 2, 4, 8, 10, 20, 40, 80]
 
 # Connect to pigpio daemon
-# pi = pigpio.pi()
-# if not pi.connected:
-#     raise RuntimeError("Could not connect to pigpio daemon. Is 'pigpiod' running?")
+pi = pigpio.pi()
+if not pi.connected:
+    raise RuntimeError("Could not connect to pigpio daemon. Is 'pigpiod' running?")
 
-# pi.set_mode(GPIO_PIN, pigpio.OUTPUT)
+pi.set_mode(GPIO_PIN, pigpio.OUTPUT)
 
 def bcd_encode(value, weights):
     """
