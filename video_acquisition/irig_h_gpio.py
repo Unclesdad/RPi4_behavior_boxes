@@ -212,6 +212,7 @@ def decode_to_irig_h(binary_list: List[bool]) -> List:
 def find_timecode_starts(binary_list: List[bool]) -> List[int]:
     """
     Finds all the indexes in the measured list of booleans for where a timecode starts.
+    Keep in mind that this assumes that there is NO noise.
     """
     if len(binary_list) < 2:
         print("uh oh. you gave me a strangely short data set.")
