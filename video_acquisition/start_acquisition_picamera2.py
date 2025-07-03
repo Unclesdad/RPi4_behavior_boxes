@@ -220,7 +220,7 @@ with io.open(VIDEO_FILE_NAME, 'wb') as buffer:
         time.sleep(2)
         print('Started Recording')
         while True:
-            irig.send_full_irig_h_timecode() # might bring up issues later without multithreading
+            irig.generate_and_send_irig_h() # might bring up issues later without multithreading
             # time.sleep(.001)
             continue
 
