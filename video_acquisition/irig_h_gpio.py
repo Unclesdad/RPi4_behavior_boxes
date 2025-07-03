@@ -218,22 +218,3 @@ def finish():
     """
     pi.write(SENDING_GPIO_PIN, 0)
     pi.stop()
-
-
-def test():
-    sample_irig_h = [
-    'P', 1, 0, 1, 0, 1, 1, 0, 0,  # Seconds (7 bits + filler)
-    'P', 0, 1, 1, 0, 0, 1, 0, 0,  # Minutes
-    'P', 0, 0, 1, 0, 0, 0, 1, 0,  # Hours
-    'P', 0, 0, 1, 1, 0, 0, 0,     # DOY (Hundreds + Tens start)
-         0, 1, 0, 0,             # DOY (Units)
-    'P', 0, 0, 0, 0, 0, 0, 0, 0,  # Filler/control/status
-    'P', 0, 0, 0, 0, 0, 0, 0, 0,  # Final 8 bits
-]
-    # print(len(sample_irig_h))
-    # print(irig_h_to_unix(sample_irig_h))
-    frame = generate_irig_h_frame()
-    print(len(frame))
-    print(frame)
-    print(irig_h_to_unix(frame))
-test()
