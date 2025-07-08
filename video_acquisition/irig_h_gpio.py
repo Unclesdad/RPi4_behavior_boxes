@@ -1,5 +1,5 @@
 from typing import List
-# import pigpio
+import pigpio
 import time
 from datetime import datetime as dt
 import datetime
@@ -165,6 +165,19 @@ def send_irig_h_frame(frame):
             time.sleep(SENDING_BIT_LENGTH * 0.2)
             pi.write(SENDING_GPIO_PIN, 0)
             time.sleep(SENDING_BIT_LENGTH * 0.8)
+
+# def send_irig_h_frame2(frame):
+#     start_time = dt.now()
+#     frame_time_length = datetime.timedelta(seconds=60*SENDING_BIT_LENGTH)
+#     while dt.now() < start_time + frame_time_length:
+#         delta_t_seconds = (dt.now() - start_time).microseconds * 1_000_000
+#         bit_index = delta_t_seconds // SENDING_BIT_LENGTH
+#         bit = frame[bit_index]
+
+#         time_in_bit_seconds = (delta_t_seconds % SENDING_BIT_LENGTH)
+
+#         if bit == 'P':
+#             pi.write(SENDING_GPIO_PIN, )
 
 def find_pulse_length(binary_list: List[bool]) -> List[float]:
     """
