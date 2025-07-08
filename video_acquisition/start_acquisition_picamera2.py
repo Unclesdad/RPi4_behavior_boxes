@@ -218,9 +218,13 @@ with io.open(VIDEO_FILE_NAME, 'wb') as buffer:
             'AwbEnable': False,
         })
         time.sleep(2)
+
+        # Start irig sending background thread
+        irig_sender_thread = Thread(target=irig.start_irig_sending, daemon=True)
+        irig_sender_thread.start()
+
         print('Started Recording')
         while True:
-            irig.generate_and_send_irig_h() # might bring up issues later without multithreading
             # time.sleep(.001)
             continue
 

@@ -7,6 +7,7 @@ import datetime
 # Constants for timecode sending
 SENDING_GPIO_PIN = 6 
 SENDING_BIT_LENGTH = 1 # in seconds
+SENDING_INTERRUPT_PERIOD = 1 / 5000 # 5 kHz. decrease for less CPU usage
 
 # Constants for timecode measuring
 DECODE_BIT_PERIOD = 1 / 25_000 # for now frame rate is 25 kHz
@@ -166,18 +167,22 @@ def send_irig_h_frame(frame):
             pi.write(SENDING_GPIO_PIN, 0)
             time.sleep(SENDING_BIT_LENGTH * 0.8)
 
-# def send_irig_h_frame2(frame):
-#     start_time = dt.now()
-#     frame_time_length = datetime.timedelta(seconds=60*SENDING_BIT_LENGTH)
-#     while dt.now() < start_time + frame_time_length:
-#         delta_t_seconds = (dt.now() - start_time).microseconds * 1_000_000
-#         bit_index = delta_t_seconds // SENDING_BIT_LENGTH
-#         bit = frame[bit_index]
+def send_irig_h_frame2(frame):
+    start_time = dt.now()
+    frame_time_length = datetime.timedelta(seconds=len(frame)*SENDING_BIT_LENGTH)
+    while dt.now() < start_time + frame_time_length:
+        delta_t_seconds = (dt.now() - start_time).total_seconds
+        bit = frame[int(delta_t_seconds // SENDING_BIT_LENGTH)]
+        bit_time_seconds = (delta_t_seconds % SENDING_BIT_LENGTH)
 
-#         time_in_bit_seconds = (delta_t_seconds % SENDING_BIT_LENGTH)
-
-#         if bit == 'P':
-#             pi.write(SENDING_GPIO_PIN, )
+        if bit == 'P':
+            pi.write(SENDING_GPIO_PIN, 1 if bit_time_seconds < 0.8 * SENDING_BIT_LENGTH else 0)
+        elif bit == 1:
+            pi.write(SENDING_GPIO_PIN, 1 if bit_time_seconds < 0.5 * SENDING_BIT_LENGTH else 0)
+        else:
+            pi.write(SENDING_GPIO_PIN, 1 if bit_time_seconds < 0.2 * SENDING_BIT_LENGTH else 0)
+        
+        time.sleep(SENDING_INTERRUPT_PERIOD)
 
 def find_pulse_length(binary_list: List[bool]) -> List[float]:
     """
@@ -273,6 +278,10 @@ def generate_and_send_irig_h():
     frame = generate_irig_h_frame()
     send_irig_h_frame(frame)
     print(f"Frame complete; restarting next {SENDING_BIT_LENGTH * 60 * 1000} milliseconds...")
+
+def start_irig_sending():
+    while True:
+        generate_and_send_irig_h()
 
 def finish():
     """
