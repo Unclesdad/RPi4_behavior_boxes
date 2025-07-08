@@ -219,11 +219,15 @@ with io.open(VIDEO_FILE_NAME, 'wb') as buffer:
         })
         time.sleep(2)
 
+        print('Started Recording')
+
         # Start irig sending background thread
         irig_sender_thread = Thread(target=irig.start_irig_sending, daemon=True)
         irig_sender_thread.start()
 
-        print('Started Recording')
+        # UNCOMMENT THIS AND COMMENT THE OTHER CODE TO REMOVE MULTITHREADING
+        # irig.start_irig_sending()
+
         while True:
             # time.sleep(.001)
             continue
