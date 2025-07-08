@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Tuple, Union
 import pigpio
 import time
 from datetime import datetime as dt
@@ -230,7 +230,8 @@ def decode_to_irig_h(binary_list: List[bool]) -> List:
 def find_timecode_starts(binary_list: List[bool]) -> List[int]:
     """
     Finds all the indexes in the measured list of booleans for where a timecode starts.
-    Keep in mind that this assumes that there is NO noise.
+    Keep in mind that this assumes that there is NO noise, and if there is an incomplete
+    timecode at the end, it will still return a start for that timecode.
     """
     if len(binary_list) < 2:
         print("uh oh. you gave me a strangely short data set.")
@@ -246,7 +247,22 @@ def find_timecode_starts(binary_list: List[bool]) -> List[int]:
             if (flips - 1) % 120 == 0:
                 starts.append(i)
     return starts
-        
+
+def splice_binary_list(binary_list: List[bool]) -> List[Tuple[List[bool], float]]:
+    """
+    Uses the timecode starts to splice the binary list into segments that can be decoded from IRIG-H.
+    Returns a list of 2-tuples containing a timestamp (in seconds) of recording as well as the splice.
+    """
+    starts = find_timecode_starts(binary_list)
+    return [(binary_list[starts[i]:starts[i+1]], starts[i] * DECODE_BIT_PERIOD) for i in range(len(starts) - 1)]
+
+def decode_full_measurement(binary_list: List[bool]) -> List[Tuple[float, float]]:
+    """
+    Decodes the full binary measurement into a list of 2-tuples containing the time that was sent by the IRIG-H timecode as well as the time of measurement.
+    """
+    spliced = splice_binary_list(binary_list)
+    start_time_seconds = irig_h_to_posix(decode_to_irig_h(spliced[0][0])) if spliced else 0
+    return [((irig_h_to_posix(decode_to_irig_h(spliced[i][0])) - start_time_seconds), spliced[i][1]) for i in range(len(spliced))]
 
 def irig_h_to_datetime(irig_list: List) -> dt:
     """
@@ -264,9 +280,9 @@ def irig_h_to_datetime(irig_list: List) -> dt:
     year = bcd_decode(irig_list[50:54], YEARS_WEIGHTS[0:4]) + bcd_decode(irig_list[55:59], YEARS_WEIGHTS[4:8]) + (dt.now().year // 100) * 100 # add in century
     return dt.combine(datetime.date(year, 1, 1) + datetime.timedelta(days=(day_of_year - 1)), datetime.time(hours, minutes, seconds, deciseconds * 10_000))
 
-def irig_h_to_unix(irig_list: List) -> float:
+def irig_h_to_posix(irig_list: List) -> float:
     """
-    Converts a list-represented IRIG-H frame into a Unix timecode (Measured in milliseconds since 00:00:00 UTC, January 1st, 1970).
+    Converts a list-represented IRIG-H frame into a POSIX timecode (Measured in seconds since 00:00:00 UTC, January 1st, 1970).
     Since IRIG does not encode century, this code assumes that the IRIG timecode is being sent in the same century as when this function is called.
     """
     return irig_h_to_datetime(irig_list).timestamp()
