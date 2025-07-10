@@ -78,7 +78,7 @@ def generate_irig_h_frame() -> List[IRIG_BIT]:
     """
 
     now = dt.now() # Get the current local time
-    encoded_times.append(now)
+    encoded_times.append(now.timestamp())
 
     seconds_bcd = bcd_encode(now.second, SECONDS_WEIGHTS)
     minutes_bcd = bcd_encode(now.minute, MINUTES_WEIGHTS)
@@ -279,7 +279,7 @@ def send_irig_h_frame(frame: List[IRIG_BIT]):
     """
     Sends a full IRIG-H timecode through the GPIO pin.
     """
-    sending_starts.append(dt.now())
+    sending_starts.append(dt.now().timestamp())
     for i, bit in enumerate(frame):
         # print bit info
         if bit == 'P':
@@ -308,7 +308,7 @@ def send_irig_h_frame2(frame: List[IRIG_BIT]):
     """
 
     start_time = dt.now()
-    sending_starts.append(start_time)
+    sending_starts.append(start_time.timestamp())
 
     frame_time_length = datetime.timedelta(seconds=len(frame)*SENDING_BIT_LENGTH)
     while dt.now() < start_time + frame_time_length:
