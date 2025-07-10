@@ -3,6 +3,7 @@ import pigpio
 import time
 from datetime import datetime as dt
 import datetime
+import pandas as pd
 
 # Constants for timecode sending
 SENDING_GPIO_PIN = 6 
@@ -26,6 +27,10 @@ HOURS_WEIGHTS = [1, 2, 4, 8, 10, 20]
 DAY_OF_YEAR_WEIGHTS = [1, 2, 4, 8, 10, 20, 40, 80, 100, 200]
 DECISECONDS_WEIGHTS = [1, 2, 4, 8]
 YEARS_WEIGHTS = [1, 2, 4, 8, 10, 20, 40, 80]
+
+base_path = 'irig_output'
+initialization_dt = str(dt.now().strftime("%Y-%m-%d_%H-%M-%S"))
+TIMESTAMP_FILE_NAME = base_path + "_timestamps_" + initialization_dt + ".csv"
 
 # Connect to pigpio daemon
 pi = pigpio.pi()
@@ -63,6 +68,8 @@ def bcd_decode(binary: List[BINARY_BIT], weights: List[int]) -> int:
 
 # ------------------------- IRIG GENERATION ------------------------- #
 
+encoded_times = []
+
 def generate_irig_h_frame() -> List[IRIG_BIT]:
     """
     Generates a 60-bit list-represented IRIG-H timecode basd on the current hardware time.
@@ -71,6 +78,7 @@ def generate_irig_h_frame() -> List[IRIG_BIT]:
     """
 
     now = dt.now() # Get the current local time
+    encoded_times.append(now)
 
     seconds_bcd = bcd_encode(now.second, SECONDS_WEIGHTS)
     minutes_bcd = bcd_encode(now.minute, MINUTES_WEIGHTS)
@@ -265,10 +273,13 @@ def decode_full_measurement(binary_list: List[bool]) -> List[Tuple[float, float]
 
 # ------------------------- IRIG SENDING ------------------------- #
 
+sending_starts = []
+
 def send_irig_h_frame(frame: List[IRIG_BIT]):
     """
     Sends a full IRIG-H timecode through the GPIO pin.
     """
+    sending_starts.append(dt.now())
     for i, bit in enumerate(frame):
         # print bit info
         if bit == 'P':
@@ -297,6 +308,8 @@ def send_irig_h_frame2(frame: List[IRIG_BIT]):
     """
 
     start_time = dt.now()
+    sending_starts.append(start_time)
+
     frame_time_length = datetime.timedelta(seconds=len(frame)*SENDING_BIT_LENGTH)
     while dt.now() < start_time + frame_time_length:
         delta_t_seconds = (dt.now() - start_time).total_seconds()
@@ -328,9 +341,15 @@ def start_irig_sending():
     while True:
         generate_and_send_irig_h()
 
+def write_timestamps_to_file():
+    data = zip(encoded_times, sending_starts)
+    df = pd.DataFrame(data, columns=['Encoded times','Sending starts'])
+    df.to_csv(TIMESTAMP_FILE_NAME, index=False)
+
 def finish():
     """
     Something to run when timecode sending is finished; resets the sending GPIO pin and stops pigpio.
     """
+    write_timestamps_to_file()
     pi.write(SENDING_GPIO_PIN, 0)
     pi.stop()
