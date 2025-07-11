@@ -363,7 +363,8 @@ class IrigHSender:
         """
         Something to run when timecode sending is finished; resets the sending GPIO pin and stops pigpio.
         """
-        self.close_thread()
         self.write_timestamps_to_file()
         self.pi.write(self.sending_gpio_pin, 0)
         self.pi.stop()
+        self.close_thread()
+        
