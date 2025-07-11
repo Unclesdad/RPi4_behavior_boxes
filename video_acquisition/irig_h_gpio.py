@@ -115,7 +115,7 @@ def irig_h_to_datetime(irig_list: List[IRIG_BIT]) -> dt:
     day_of_year = bcd_decode(irig_list[30:34], DAY_OF_YEAR_WEIGHTS[0:4]) + bcd_decode(irig_list[35:39], DAY_OF_YEAR_WEIGHTS[4:8]) + bcd_decode(irig_list[40:42], DAY_OF_YEAR_WEIGHTS[8:10])
     deciseconds = bcd_decode(irig_list[45:49], DECISECONDS_WEIGHTS)
     year = bcd_decode(irig_list[50:54], YEARS_WEIGHTS[0:4]) + bcd_decode(irig_list[55:59], YEARS_WEIGHTS[4:8]) + (dt.now().year // 100) * 100 # add in century
-    return dt.combine(datetime.date(year, 1, 1) + datetime.timedelta(days=(day_of_year - 1)), datetime.time(hours, minutes, seconds, deciseconds * 10_000))
+    return dt.combine(datetime.date(year, 1, 1) + datetime.timedelta(days=(day_of_year - 1)), datetime.time(hours, minutes, seconds, deciseconds * 100_000))
 
 def irig_h_to_posix(irig_list: List[IRIG_BIT]) -> float:
     """
@@ -160,8 +160,8 @@ def decode_full_measurement(binary_list: List[bool]) -> List[Tuple[float, float]
     """
 
     spliced = splice_binary_list(binary_list)
-    timecode_start_seconds = irig_h_to_posix(decode_to_irig_h(spliced[0][0])) if spliced else 0
-    timestamp_start_seconds = spliced[0][1] if spliced else 0
+    timecode_start_seconds = 0 #irig_h_to_posix(decode_to_irig_h(spliced[0][0])) if spliced else 0
+    timestamp_start_seconds = 0 #spliced[0][1] if spliced else 0
     return [((irig_h_to_posix(decode_to_irig_h(spliced[i][0])) - timecode_start_seconds), spliced[i][1] - timestamp_start_seconds) for i in range(len(spliced))]
     
 class IrigHSender:
