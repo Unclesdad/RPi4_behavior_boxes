@@ -7,7 +7,6 @@ import datetime as dt
 from picamera2 import Picamera2, Preview, MappedArray
 from picamera2.encoders import H264Encoder, Quality
 from picamera2.outputs import FileOutput
-import irig_h_gpio as irig
 import cv2
 from libcamera import controls
 from threading import Thread, Event
@@ -16,6 +15,7 @@ import RPi.GPIO as GPIO
 import os
 import signal
 from pathlib import Path
+from irig_h_gpio import IrigHSender
 
 # this function is called when the program receives a SIGINT
 def signal_handler(signum, frame):
@@ -204,6 +204,8 @@ camera.start_preview(Preview.DRM, x=100, y=0, width=1067, height=800)
 # timestamps.start_flipper_thread()
 GPIO.add_event_detect(pin_flipper, GPIO.BOTH, callback=timestamps.flipper_callback_GPIO, bouncetime=100)
 
+irig_sender = IrigHSender(sending_gpio_pin=6)
+
 with io.open(VIDEO_FILE_NAME, 'wb') as buffer:
     encoder = H264Encoder()
     output = FileOutput(file=buffer)#, pts=TIMESTAMP_FILE_NAME)
@@ -221,9 +223,7 @@ with io.open(VIDEO_FILE_NAME, 'wb') as buffer:
 
         print('Started Recording')
 
-        # Start irig sending background thread
-        irig_sender_thread = Thread(target=irig.start_irig_sending, daemon=True)
-        irig_sender_thread.start()
+        irig_sender.start()
 
         # UNCOMMENT THIS AND COMMENT THE OTHER CODE TO REMOVE MULTITHREADING
         # irig.start_irig_sending()
@@ -240,7 +240,7 @@ with io.open(VIDEO_FILE_NAME, 'wb') as buffer:
         print(e)
 
     finally:
-        irig.finish()
+        irig_sender.finish()
         timestamps.close()
         sys.exit(0)
         
