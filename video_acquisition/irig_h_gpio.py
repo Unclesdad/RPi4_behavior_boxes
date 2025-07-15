@@ -5,11 +5,16 @@ from datetime import datetime as dt
 import datetime
 import pandas as pd
 from threading import Thread
+import math
 
 IRIG_BIT = Literal[0,1,'P'] # type for IRIG-H bits
 BINARY_BIT = Literal[0,1] # type for binary bits
 
 SENDING_BIT_LENGTH = 1 # seconds
+
+# Constants for timecode sending
+MEASURED_DELAY = 0 # The constant delay between GPS PPS and the RPi PPS in seconds (positive means GPS is ahead)
+SENDING_HEAD_START = 0.01 # seconds in advance to stop sleeping and start busy waiting
 
 # Constants for timecode measuring
 DECODE_BIT_PERIOD = 1 / 25_000 # for now frame rate is 25 kHz
@@ -189,22 +194,20 @@ class IrigHSender:
 
     # ------------------------- IRIG GENERATION ------------------------- #
     
-    def generate_irig_h_frame(self) -> List[IRIG_BIT]:
+    def generate_irig_h_frame(self, time: dt) -> List[IRIG_BIT]:
         """
-        Generates a 60-bit list-represented IRIG-H timecode basd on the current hardware time.
+        Generates a 60-bit list-represented IRIG-H timecode based on the given time.
         Includes seconds, minutes, hours, day of year, tenths of seconds, and year.
         'P' is used for position identifiers.
         """
+        self.encoded_times.append(time.timestamp())
 
-        now = dt.now() # Get the current local time
-        self.encoded_times.append(now.timestamp())
-
-        seconds_bcd = bcd_encode(now.second, SECONDS_WEIGHTS)
-        minutes_bcd = bcd_encode(now.minute, MINUTES_WEIGHTS)
-        hours_bcd = bcd_encode(now.hour, HOURS_WEIGHTS)
-        day_of_year_bcd = bcd_encode(now.timetuple().tm_yday, DAY_OF_YEAR_WEIGHTS)
-        deciseconds_bcd = bcd_encode(now.microsecond // 100000, DECISECONDS_WEIGHTS)
-        year_bcd = bcd_encode(now.year % 100, YEARS_WEIGHTS)
+        seconds_bcd = bcd_encode(time.second + 1, SECONDS_WEIGHTS)
+        minutes_bcd = bcd_encode(time.minute, MINUTES_WEIGHTS)
+        hours_bcd = bcd_encode(time.hour, HOURS_WEIGHTS)
+        day_of_year_bcd = bcd_encode(time.timetuple().tm_yday, DAY_OF_YEAR_WEIGHTS)
+        deciseconds_bcd = bcd_encode(0, DECISECONDS_WEIGHTS) # since always encoding at the advent of a second
+        year_bcd = bcd_encode(time.year % 100, YEARS_WEIGHTS)
 
         irig_h_list = []
 
@@ -316,6 +319,8 @@ class IrigHSender:
         start_time = dt.now()
         self.sending_starts.append(start_time.timestamp())
 
+        time.sleep(1 - (start_time.timestamp() % 1))
+
         frame_time_length = datetime.timedelta(seconds=len(frame) * SENDING_BIT_LENGTH)
         while dt.now() < start_time + frame_time_length:
             delta_t_seconds = (dt.now() - start_time).total_seconds()
@@ -344,8 +349,46 @@ class IrigHSender:
         """
         Continuously sends irig timecodes in an unending while loop.
         """
+        def precise_wait_until(wake_time: float):
+            """
+            Sleeps until a head start before 
+            """
+            now = time.time()
+            if wake_time - now > SENDING_HEAD_START:
+                time.sleep(wake_time - now - SENDING_HEAD_START)
+            while time.time() < wake_time:
+                    time.sleep(self.sending_loop_period)
+            
+
+        def calculate_pulse_length(bit: IRIG_BIT) -> float:
+            if bit == 'P':
+                return 0.8 * SENDING_BIT_LENGTH
+            elif bit == 1:
+                return 0.5 * SENDING_BIT_LENGTH
+            else:
+                return 0.2 * SENDING_BIT_LENGTH
+        
+        def flip_for_time(pulse_time: float):
+            self.pi.write(self.sending_gpio_pin, 1)
+            time.sleep(pulse_time)
+            self.pi.write(self.sending_gpio_pin, 0)
+
         while True:
-            self.generate_and_send_irig_h()
+            now = dt.now()
+
+            start_time = math.ceil(now.timestamp())
+            self.sending_starts.append(start_time)
+
+            frame = self.generate_irig_h_frame(now)
+            
+            for bit in frame:
+                pulse_time = calculate_pulse_length(bit)
+
+                precise_wait_until(start_time - MEASURED_DELAY)
+                flip_for_time(pulse_time)
+
+                start_time += SENDING_BIT_LENGTH
+
 
     def start(self):
         self.sender_thread.start()
