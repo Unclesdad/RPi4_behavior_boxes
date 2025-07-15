@@ -351,7 +351,7 @@ class IrigHSender:
         """
         def precise_wait_until(wake_time: float):
             """
-            Sleeps until a head start before 
+            Sleeps until a head start before the wake time, then busy waits until then. Method ends when busy waiting is finished.
             """
             now = time.time()
             if wake_time - now > SENDING_HEAD_START:
@@ -369,6 +369,9 @@ class IrigHSender:
                 return 0.2 * SENDING_BIT_LENGTH
         
         def flip_for_time(pulse_time: float):
+            """
+            Flips the sending GPIO pin to HIGH for a certain amount of time.
+            """
             self.pi.write(self.sending_gpio_pin, 1)
             time.sleep(pulse_time)
             self.pi.write(self.sending_gpio_pin, 0)
