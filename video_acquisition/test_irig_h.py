@@ -1,6 +1,6 @@
 import irig_h_gpio as irig
 
-sender = irig.IrigHSender(6)
+sender = irig.IrigHSender(sending_gpio_pin=6)
 
 try:
     sender.start()
