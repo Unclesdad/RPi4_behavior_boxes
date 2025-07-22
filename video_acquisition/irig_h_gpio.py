@@ -372,6 +372,7 @@ class IrigHSender:
             """
             Flips the sending GPIO pin to HIGH for a certain amount of time.
             """
+            print(f'Flipping for {pulse_time} seconds at {time.time()}')
             self.pi.write(self.sending_gpio_pin, 1)
             time.sleep(pulse_time)
             self.pi.write(self.sending_gpio_pin, 0)
@@ -388,6 +389,7 @@ class IrigHSender:
                 pulse_time = calculate_pulse_length(bit)
 
                 precise_wait_until(start_time - MEASURED_DELAY)
+                print(f'start time: {start_time}')
                 flip_for_time(pulse_time)
 
                 start_time += SENDING_BIT_LENGTH
