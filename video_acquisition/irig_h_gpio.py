@@ -84,6 +84,16 @@ def find_pulse_length(binary_list: List[bool]) -> List[float]:
 
     return pulse_length_list
 
+def identify_pulse_length(length):
+    if length > P_THRESHOLD:
+        return 'P'
+    if length > ONE_THRESHOLD:
+        return 1
+    if length > ZERO_THRESHOLD:
+        return 0
+    else: 
+        return None
+
 def decode_to_irig_h(binary_list: List[bool]) -> List[IRIG_BIT]:
     """
     Decodes a list of measured pulse lengths (in seconds) to a list-represented IRIG-H frame.
@@ -92,16 +102,6 @@ def decode_to_irig_h(binary_list: List[bool]) -> List[IRIG_BIT]:
     if len(binary_list) < 2:
         print("Inputted data set is too short.")
         return []
-    
-    def identify_pulse_length(length):
-        if length > P_THRESHOLD:
-            return 'P'
-        if length > ONE_THRESHOLD:
-            return 1
-        if length > ZERO_THRESHOLD:
-            return 0
-        else: 
-            return None
 
     return [bit for bit in [identify_pulse_length(length) for length in find_pulse_length(binary_list)] if bit != None]
 
@@ -284,83 +284,18 @@ class IrigHSender:
 
     # ------------------------- IRIG SENDING ------------------------- #
 
-    def send_irig_h_frame(self, frame: List[IRIG_BIT]):
+    def precise_wait_until(self, wake_time: float):
         """
-        Sends a full IRIG-H timecode through the GPIO pin.
+        Sleeps until a head start before the wake time, then busy waits until then. Method ends when busy waiting is finished.
         """
-        self.sending_starts.append(dt.now().timestamp())
-        for i, bit in enumerate(frame):
-            # print bit info
-            if bit == 'P':
-                print(f"Bit {i:02d}: P")
-                self.pi.write(self.sending_gpio_pin, 1)
-                time.sleep(SENDING_BIT_LENGTH * 0.8)
-                self.pi.write(self.sending_gpio_pin, 0)
-                time.sleep(SENDING_BIT_LENGTH * 0.2)
-            elif bit == 1:
-                print(f"Bit {i:02d}: 1")
-                self.pi.write(self.sending_gpio_pin, 1)
-                time.sleep(SENDING_BIT_LENGTH * 0.5)
-                self.pi.write(self.sending_gpio_pin, 0)
-                time.sleep(SENDING_BIT_LENGTH * 0.5)
-            else:
-                print(f"Bit {i:02d}: 0")
-                self.pi.write(self.sending_gpio_pin, 1)
-                time.sleep(SENDING_BIT_LENGTH * 0.2)
-                self.pi.write(self.sending_gpio_pin, 0)
-                time.sleep(SENDING_BIT_LENGTH * 0.8)
-
-    def send_irig_h_frame2(self, frame: List[IRIG_BIT]):
-        """
-        Sends a full IRIG-H timecode through the GPIO pin using a while loop that checks the current time and sends the correct bit at the correct time.
-        This method is more accurate than the first method (no time.sleep() is used), but also more CPU-intensive.
-        """
-
-        start_time = dt.now()
-        self.sending_starts.append(start_time.timestamp())
-
-        time.sleep(1 - (start_time.timestamp() % 1))
-
-        frame_time_length = datetime.timedelta(seconds=len(frame) * SENDING_BIT_LENGTH)
-        while dt.now() < start_time + frame_time_length:
-            delta_t_seconds = (dt.now() - start_time).total_seconds()
-            bit = frame[int(delta_t_seconds // SENDING_BIT_LENGTH)]
-            bit_time_seconds = (delta_t_seconds % SENDING_BIT_LENGTH)
-
-            if bit == 'P':
-                self.pi.write(self.sending_gpio_pin, 1 if bit_time_seconds < 0.8 * SENDING_BIT_LENGTH else 0)
-            elif bit == 1:
-                self.pi.write(self.sending_gpio_pin, 1 if bit_time_seconds < 0.5 * SENDING_BIT_LENGTH else 0)
-            else:
-                self.pi.write(self.sending_gpio_pin, 1 if bit_time_seconds < 0.2 * SENDING_BIT_LENGTH else 0)
-        
-            time.sleep(self.sending_loop_period)
-
-    def generate_and_send_irig_h(self): 
-        """
-        Generates a full IRIG-H frame for when this is called, then sends it over the course of a frame interval.
-        """
-
-        frame = self.generate_irig_h_frame()
-        self.send_irig_h_frame2(frame) # using method 2
-        print(f"Frame complete; restarting next {SENDING_BIT_LENGTH * 60 * 1000} milliseconds...")
-
-    def continuous_irig_sending(self):
-        """
-        Continuously sends irig timecodes in an unending while loop.
-        """
-        def precise_wait_until(wake_time: float):
-            """
-            Sleeps until a head start before the wake time, then busy waits until then. Method ends when busy waiting is finished.
-            """
-            now = time.time()
-            if wake_time - now > SENDING_HEAD_START:
-                time.sleep(wake_time - now - SENDING_HEAD_START)
-            while time.time() < wake_time:
-                    time.sleep(self.sending_loop_period)
+        now = time.time()
+        if wake_time - now > SENDING_HEAD_START:
+            time.sleep(wake_time - now - SENDING_HEAD_START)
+        while time.time() < wake_time:
+             time.sleep(self.sending_loop_period)
             
 
-        def calculate_pulse_length(bit: IRIG_BIT) -> float:
+    def calculate_pulse_length(bit: IRIG_BIT) -> float:
             if bit == 'P':
                 return 0.8 * SENDING_BIT_LENGTH
             elif bit == 1:
@@ -368,7 +303,7 @@ class IrigHSender:
             else:
                 return 0.2 * SENDING_BIT_LENGTH
         
-        def flip_for_time(pulse_time: float):
+    def flip_for_time(self, pulse_time: float):
             """
             Flips the sending GPIO pin to HIGH for a certain amount of time.
             """
@@ -376,6 +311,11 @@ class IrigHSender:
             self.pi.write(self.sending_gpio_pin, 1)
             time.sleep(pulse_time)
             self.pi.write(self.sending_gpio_pin, 0)
+
+    def continuous_irig_sending(self):
+        """
+        Continuously sends irig timecodes in an unending while loop.
+        """
 
         while True:
             now = dt.now()
@@ -386,11 +326,11 @@ class IrigHSender:
             frame = self.generate_irig_h_frame(now)
             
             for bit in frame:
-                pulse_time = calculate_pulse_length(bit)
+                pulse_time = self.calculate_pulse_length(bit)
 
-                precise_wait_until(start_time - MEASURED_DELAY)
+                self.precise_wait_until(start_time - MEASURED_DELAY)
                 print(f'start time: {start_time}')
-                flip_for_time(pulse_time)
+                self.flip_for_time(pulse_time)
 
                 start_time += SENDING_BIT_LENGTH
 
